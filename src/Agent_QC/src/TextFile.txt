@@ -1,4 +1,5 @@
-﻿vllm 调用测试
+﻿cloud code 不用处理
+vllm 调用测试 
 curl http://192.168.62.11:8100/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"/home/gulu/agent_qc/data/models/Qwen/Qwen3-4B-AWQ\",\"messages\":[{\"role\":\"user\",\"content\":\"你好，你是谁\"}]}"
 
 
