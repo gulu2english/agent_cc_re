@@ -69,6 +69,34 @@ if (oracleFreeSql != null)
 else
     builder.Services.AddSingleton(new ReportQueryService(freeSql));
 
+// ── jieba 中文分词 ──────────────────────────────────
+var dictPath = Path.Combine(AppContext.BaseDirectory, "knowledge", "jieba_medical_dict.txt");
+builder.Services.AddSingleton(new JiebaSegmenter(dictPath));
+
+// ── RuleEngine (replaces individual rule classes) ──
+var rulesDbPath = Path.Combine(AppContext.BaseDirectory, "knowledge", "rules.db");
+var ruleEngine = new RuleEngine(rulesDbPath);
+ruleEngine.Initialize();
+builder.Services.AddSingleton(ruleEngine);
+
+// ── Level 2: RoBERTa NER + Logic Engine ─────────────
+var terminologyPath = Path.Combine(AppContext.BaseDirectory, "knowledge", "terminology.yaml");
+var entityNormalizer = new EntityNormalizer(terminologyPath);
+builder.Services.AddSingleton(entityNormalizer);
+
+builder.Services.AddSingleton<LogicEngine>();
+
+var modelPath = Path.Combine(AppContext.BaseDirectory, "knowledge", "models", "roberta-ner.onnx");
+var vocabPath = Path.Combine(AppContext.BaseDirectory, "knowledge", "models", "vocab.txt");
+builder.Services.AddSingleton(sp =>
+{
+    var jieba = sp.GetRequiredService<JiebaSegmenter>();
+    var normalizer = sp.GetRequiredService<EntityNormalizer>();
+    var service = new RobertaNerService(jieba, normalizer, modelPath, vocabPath);
+    service.Initialize();
+    return service;
+});
+
 // ── QC 服务 ─────────────────────────────────────────
 builder.Services.AddSingleton<IQcService, QcService>();
 

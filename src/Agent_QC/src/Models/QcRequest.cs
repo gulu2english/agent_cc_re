@@ -15,4 +15,10 @@ public class QcRequest
     public string? ExamMethod { get; set; }
     public string? ExamDevice { get; set; }
     public string? AccessionNo { get; set; }
+
+    /// <summary>影像所见分词后结果（Level 0 预处理阶段填充）</summary>
+    public List<string>? SegmentedFindings { get; set; }
+
+    /// <summary>影像结论分词后结果（Level 0 预处理阶段填充）</summary>
+    public List<string>? SegmentedImpression { get; set; }
 }

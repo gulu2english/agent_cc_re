@@ -24,7 +24,20 @@ public class VllmIntegrationTests
         var vllm = new VllmClient(new HttpClient(), "http://localhost:8100", "qwen3-4b-awq");
         await vllm.CheckHealthAsync();
         var registry = new SkillRegistry("knowledge/skills");
-        var service = new QcService(vllm, registry);
+        var dbPath = Path.Combine(AppContext.BaseDirectory, "knowledge", "rules.db");
+        if (!File.Exists(dbPath))
+            dbPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "knowledge", "rules.db"));
+        var ruleEngine = new RuleEngine(dbPath);
+        ruleEngine.Initialize();
+        var dictPath = Path.Combine(AppContext.BaseDirectory, "knowledge", "jieba_medical_dict.txt");
+        var terminologyPath = Path.Combine(AppContext.BaseDirectory, "knowledge", "terminology.yaml");
+        var jieba = new JiebaSegmenter(dictPath);
+        var normalizer = new EntityNormalizer(terminologyPath);
+        var modelPath = Path.Combine(AppContext.BaseDirectory, "knowledge", "models", "roberta-ner.onnx");
+        var vocabPath = Path.Combine(AppContext.BaseDirectory, "knowledge", "models", "vocab.txt");
+        var robertaNer = new RobertaNerService(jieba, normalizer, modelPath, vocabPath);
+        var logicEngine = new LogicEngine();
+        var service = new QcService(ruleEngine, robertaNer, normalizer, logicEngine, vllm, registry);
 
         var request = new QcRequest
         {

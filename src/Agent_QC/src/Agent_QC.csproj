@@ -15,7 +15,17 @@
     <PackageReference Include="FreeSql.Provider.Oracle" Version="3.5.309" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
     <PackageReference Include="YamlDotNet" Version="16.2.1" />
+    <PackageReference Include="jieba.NET" Version="0.42.2" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.25.1" />
   </ItemGroup>
+
+  <Target Name="CopyJiebaResources" AfterTargets="AfterBuild">
+    <ItemGroup>
+      <_JiebaResources Include="$(UserProfile)/.nuget/packages/jieba.net/0.42.2/Resources/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_JiebaResources)" DestinationFolder="$(OutputPath)Resources" SkipUnchangedFiles="true" />
+  </Target>
 
   <ItemGroup>
     <Content Include="../../../knowledge/**">

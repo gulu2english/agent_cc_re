@@ -14,10 +14,14 @@ public class SkillRegistry
         if (resolved == null)
             return;
 
-        foreach (var file in Directory.GetFiles(resolved, "*.md"))
+        foreach (var systemFile in Directory.GetFiles(resolved, "*-system.md"))
         {
-            var skillId = Path.GetFileNameWithoutExtension(file);
-            var (system, user) = ParsePromptFile(file);
+            var fileName = Path.GetFileNameWithoutExtension(systemFile); // e.g. "gender-anatomy-checker-system"
+            var skillId = fileName[..^"-system".Length];                 // e.g. "gender-anatomy-checker"
+            var userFile = Path.Combine(resolved, $"{skillId}-user.md");
+
+            var system = File.ReadAllText(systemFile).Trim();
+            var user = File.Exists(userFile) ? File.ReadAllText(userFile).Trim() : "";
             _prompts[skillId] = (system, user);
         }
     }
@@ -45,26 +49,6 @@ public class SkillRegistry
         }
 
         return null;
-    }
-
-    private static (string system, string user) ParsePromptFile(string path)
-    {
-        var text = File.ReadAllText(path);
-        var system = ExtractSection(text, "## System");
-        var user = ExtractSection(text, "## User");
-        return (system, user);
-    }
-
-    private static string ExtractSection(string text, string header)
-    {
-        var startIdx = text.IndexOf(header, StringComparison.Ordinal);
-        if (startIdx < 0) return "";
-
-        startIdx += header.Length;
-        var endIdx = text.IndexOf("\n## ", startIdx, StringComparison.Ordinal);
-        if (endIdx < 0) endIdx = text.Length;
-
-        return text[startIdx..endIdx].Trim();
     }
 
     public bool HasSkill(string skillId) => _prompts.ContainsKey(skillId);

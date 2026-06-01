@@ -26,4 +26,11 @@
     <ProjectReference Include="..\src\Agent_QC.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\..\knowledge\rules.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>knowledge\rules.db</Link>
+    </Content>
+  </ItemGroup>
+
 </Project>

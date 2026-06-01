@@ -1,60 +1,48 @@
 using System.Diagnostics;
 using Agent_QC.Models;
-using Agent_QC.Services.Rules;
 using Agent_QC.Services.Rules.Level1;
-using Agent_QC.Services.Rules.Level2;
 
 namespace Agent_QC.Services;
 
-/// <summary>
-/// QC 核心管线服务——5层流水线：
-/// Level 0 预处理 → Level 1 文本格式 → Level 2 语义规范 → Level 3 逻辑规则 → Level 4 危急值。
-/// </summary>
 public class QcService : IQcService
 {
-    // Level 0
+    // Level 0: preprocessing
     private readonly SectionParser _sectionParser = new();
+    private readonly JiebaSegmenter _jieba;
 
-    // Level 1: 文本格式
-    private readonly PhraseTypoRule _phraseTypoRule = new();
-    private readonly DuplicateCharRule _duplicateCharRule = new();
+    // Rule engine (replaces ALL Level 1-4 individual rule classes)
+    private readonly RuleEngine _ruleEngine;
+
+    // Level 2: RoBERTa NER + Logic Engine
+    private readonly RobertaNerService _robertaNer;
+    private readonly EntityNormalizer _entityNormalizer;
+    private readonly LogicEngine _logicEngine;
+
+    // Measurement unit (preserved — not migrated)
     private readonly UnitFormatRule _unitFormatRule = new();
-    private readonly SentencePunctuationRule _sentencePunctuationRule = new();
-    private readonly PatientInfoRule _patientInfoRule = new();
-    private readonly TerminologyStandardRule _terminologyStandardRule = new();
 
-    // Level 2: 语义规范
-    private readonly ColloquialTermRule _colloquialTermRule = new();
-    private readonly AnatomyTermRule _anatomyTermRule = new();
-    private readonly LesionCompletenessRule _lesionCompletenessRule = new();
-    private readonly RadsClassificationRule _radsClassificationRule = new();
-    private readonly FindingsImpressionConsistencyRule _findingsImpressionConsistencyRule = new();
-    private readonly ComparisonDescriptionRule _comparisonDescriptionRule = new();
-    private readonly AdviceConsistencyRule _adviceConsistencyRule = new();
-
-    // Level 3: 逻辑规则
-    private readonly GenderConflictRule _genderConflictRule = new();
-    private readonly AgeConflictRule _ageConflictRule = new();
-    private readonly DirectionConflictRule _directionConflictRule = new();
-    private readonly DeviceConflictRule _deviceConflictRule = new();
-    private readonly ScanEnhanceConflictRule _scanEnhanceConflictRule = new();
-
-    // Level 4: 危急值
-    private readonly CriticalSignRule _criticalSignRule = new();
-
-    // Hermes Skill Squad (LLM 增强层)
+    // Hermes Skill Squad (unchanged)
     private readonly IVllmClient _vllm;
     private readonly SkillRegistry _skillRegistry;
     private readonly HermesOrchestrator _orchestrator;
     private readonly QaArbiter _arbiter;
 
-    // 评分
     private readonly ScoringEngine _scoringEngine = new();
 
-    public QcService(IVllmClient? vllm = null, SkillRegistry? skillRegistry = null)
+    public QcService(RuleEngine ruleEngine,
+        RobertaNerService robertaNer,
+        EntityNormalizer entityNormalizer,
+        LogicEngine logicEngine,
+        IVllmClient? vllm = null,
+        SkillRegistry? skillRegistry = null, JiebaSegmenter? jieba = null)
     {
+        _ruleEngine = ruleEngine;
+        _robertaNer = robertaNer;
+        _entityNormalizer = entityNormalizer;
+        _logicEngine = logicEngine;
         _vllm = vllm ?? new VllmClient(new HttpClient(), "http://localhost:8100");
         _skillRegistry = skillRegistry ?? new SkillRegistry();
+        _jieba = jieba ?? new JiebaSegmenter("knowledge/jieba_medical_dict.txt");
         _orchestrator = new HermesOrchestrator(_vllm, _skillRegistry);
         _arbiter = new QaArbiter();
     }
@@ -62,39 +50,29 @@ public class QcService : IQcService
     public async Task<AjaxResult> ExecuteQcAsync(QcRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.ReportId))
-            return AjaxResult.Error(400, "ReportId 不能为空");
+            return AjaxResult.Error(400, "ReportId cannot be empty");
 
         var sw = Stopwatch.StartNew();
         var issues = new List<QcIssueDto>();
 
-        // ── Level 1: 文本格式 ──
-        issues.AddRange(_phraseTypoRule.Check(request));
-        issues.AddRange(_duplicateCharRule.Check(request));
+        // Level 0: preprocessing
+        request.SegmentedFindings = _jieba.Segment(request.Findings ?? "");
+        request.SegmentedImpression = _jieba.Segment(request.Impression ?? "");
+
+        // Level 1: unified rule engine
+        issues.AddRange(_ruleEngine.Execute(request));
+
+        // Level 2: RoBERTa NER + Logic Engine
+        var findingsEntities = _robertaNer.Extract(request.Findings ?? "");
+        var impressionEntities = _robertaNer.Extract(request.Impression ?? "");
+        var nFindings = _entityNormalizer.Normalize(findingsEntities);
+        var nImpression = _entityNormalizer.Normalize(impressionEntities);
+        issues.AddRange(_logicEngine.Compare(request, nFindings, nImpression, issues));
+
+        // Measurement unit check (preserved separately)
         issues.AddRange(_unitFormatRule.Check(request));
-        issues.AddRange(_sentencePunctuationRule.Check(request));
-        issues.AddRange(_patientInfoRule.Check(request));
-        issues.AddRange(_terminologyStandardRule.Check(request));
 
-        // ── Level 2: 语义规范 ──
-        issues.AddRange(_colloquialTermRule.Check(request));
-        issues.AddRange(_anatomyTermRule.Check(request));
-        issues.AddRange(_lesionCompletenessRule.Check(request));
-        issues.AddRange(_radsClassificationRule.Check(request));
-        issues.AddRange(_findingsImpressionConsistencyRule.Check(request));
-        issues.AddRange(_comparisonDescriptionRule.Check(request));
-        issues.AddRange(_adviceConsistencyRule.Check(request));
-
-        // ── Level 3: 逻辑规则 ──
-        issues.AddRange(_genderConflictRule.Check(request));
-        issues.AddRange(_ageConflictRule.Check(request));
-        issues.AddRange(_directionConflictRule.Check(request));
-        issues.AddRange(_deviceConflictRule.Check(request));
-        issues.AddRange(_scanEnhanceConflictRule.Check(request));
-
-        // ── Level 4: 危急值 ──
-        issues.AddRange(_criticalSignRule.Check(request));
-
-        // ── Skill Squad (LLM 增强，vLLM 可用时) ──
+        // Skill Squad (unchanged)
         if (_vllm.Health == VllmHealthStatus.Healthy)
         {
             var ruleIssues = new List<QcIssueDto>(issues);
@@ -105,7 +83,6 @@ public class QcService : IQcService
 
         sw.Stop();
 
-        // 4维度评分
         var response = new QcResponse
         {
             ReportId = request.ReportId,
@@ -116,8 +93,8 @@ public class QcService : IQcService
         _scoringEngine.Calculate(response);
 
         response.Summary = issues.Count == 0
-            ? "未发现问题"
-            : $"发现 {issues.Count} 个问题";
+            ? "No issues found"
+            : $"Found {issues.Count} issues";
 
         return AjaxResult.Success(response);
     }
