@@ -10,15 +10,16 @@ public class HermesOrchestrator
 
     private static readonly Dictionary<string, string> IssueToSkill = new()
     {
-        ["gender_conflict"] = "gender-anatomy-checker",
-        ["direction_conflict"] = "site-consistency-checker",
+        // wzx 手动去掉，直接通过规则进行处理，不适用于llm中实现
+        //["gender_conflict"] = "gender-anatomy-checker",
+       // ["direction_conflict"] = "site-consistency-checker",
         ["semantic_conflict"] = "findings-impression-nli",
         ["critical_sign"] = "critical-sign-arbiter",
         ["device_conflict"] = "device-method-validator",
         ["scan_enhance_conflict"] = "device-method-validator",
         ["completeness_error"] = "measurement-completeness",
         ["rads_missing"] = "rads-compliance-checker",
-        ["terminology_nonstandard"] = "terminology-validator",
+        //["terminology_nonstandard"] = "terminology-validator",
         ["text_error"] = "terminology-validator",
         ["colloquial"] = "terminology-validator",
     };
