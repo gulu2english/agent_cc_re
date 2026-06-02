@@ -20,7 +20,7 @@
 
 ```bash
 cd /home/gulu/agent_qc_cc
-python scripts/ner-model/build_ner_onnx.py
+python3 scripts/ner-model/build_ner_onnx.py
 ```
 
 脚本会自动：
